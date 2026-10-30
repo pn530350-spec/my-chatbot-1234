@@ -1,0 +1,320 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prince AI Chatbot</title>
+<style>
+*{box-sizing:border-box}
+:root{
+--bg:#10111b;--side:#191a29;--panel:#222337;
+--text:#fff;--muted:#aaaabd;--border:#36364b;
+--accent:#8757ff
+}
+body{margin:0;background:var(--bg);color:var(--text);
+font-family:Arial,sans-serif;height:100dvh}
+.app{display:flex;height:100dvh}
+.sidebar{width:255px;background:var(--side);padding:18px;
+display:flex;flex-direction:column;border-right:1px solid var(--border)}
+.logo{font-size:27px;font-weight:bold;margin-bottom:25px}
+.logo span{color:#a78bfa}
+button{cursor:pointer;color:inherit}
+.new{padding:13px;background:var(--accent);border:0;border-radius:10px}
+.history{flex:1;overflow:auto;margin-top:20px}
+.history button{display:block;width:100%;padding:12px;text-align:left;
+background:transparent;border:0;border-radius:8px;color:var(--muted)}
+.history button:hover{background:var(--panel)}
+.profile{padding-top:15px;border-top:1px solid var(--border)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:65px;border-bottom:1px solid var(--border);
+display:flex;align-items:center;justify-content:space-between;padding:0 18px}
+select{background:var(--panel);color:var(--text);padding:9px;
+border:1px solid var(--border);border-radius:8px}
+.chat{flex:1;overflow:auto;padding:22px 15px}
+.welcome{text-align:center;margin:10vh auto 0}
+.welcome h1{font-size:40px}
+.purple{color:#a78bfa}
+.suggestions{display:grid;grid-template-columns:1fr 1fr;
+gap:10px;max-width:600px;margin:30px auto}
+.suggestions button{padding:17px;background:var(--panel);
+border:1px solid var(--border);border-radius:12px;text-align:left}
+.message{max-width:800px;margin:0 auto 22px;display:flex;gap:12px;line-height:1.7}
+.avatar{width:35px;height:35px;flex-shrink:0;border-radius:50%;
+background:var(--accent);display:grid;place-items:center}
+.bubble{flex:1;white-space:pre-wrap;overflow-wrap:anywhere;padding-top:5px}
+.user .bubble{background:var(--panel);padding:12px;border-radius:12px}
+.bottom{padding:12px 15px 18px}
+form{max-width:800px;margin:auto;background:var(--panel);
+border:1px solid var(--border);border-radius:15px;padding:12px}
+textarea{width:100%;background:transparent;color:var(--text);
+border:0;outline:none;resize:none;min-height:45px;font-size:16px}
+.controls{display:flex;justify-content:space-between;align-items:center}
+.send{background:var(--accent);border:0;padding:10px 18px;border-radius:9px}
+.status,.note{color:var(--muted);font-size:12px}
+.note{text-align:center;margin-top:10px}
+.menu{display:none}
+@media(max-width:650px){
+.sidebar{display:none}.menu{display:block}
+.suggestions{grid-template-columns:1fr}
+.welcome h1{font-size:30px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+<div class="logo">✦ Prince <span>AI</span></div>
+<button class="new" id="new">＋ New Chat</button>
+<p class="status">CHAT HISTORY</p>
+<div class="history" id="history"></div>
+<div class="profile">👑 <b>Prince</b><br><small>Class 9th Student</small></div>
+</aside>
+
+<main class="main">
+<header class="top">
+<div><button class="menu" onclick="alert('Use desktop view for history')">☰</button>
+<b>✦ Prince AI</b></div>
+<div>
+<select id="model">
+<option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+<option value="openai/gpt-oss-20b">GPT OSS 20B</option>
+</select>
+<button id="theme">☼</button>
+</div>
+</header>
+
+<section class="chat" id="chat">
+<div class="welcome" id="welcome">
+<div style="font-size:50px">🤖</div>
+<h1>Hello, <span class="purple">Prince!</span></h1>
+<p>Your personal AI assistant. Ask me anything!</p>
+<div class="suggestions">
+<button data-q="Explain Science for Class 9">🧪 Explain Science</button>
+<button data-q="Give me 10 GK questions">🌎 General Knowledge</button>
+<button data-q="Teach me algebra">📐 Learn Maths</button>
+<button data-q="Tell me about space">🚀 Explore Space</button>
+</div>
+</div>
+</section>
+
+<div class="bottom">
+<form id="form">
+<textarea id="input" placeholder="Message Prince AI..." required></textarea>
+<div class="controls">
+<span class="status" id="status">Ready to chat</span>
+<button class="send" id="send">Send ➤</button>
+</div>
+</form>
+<div class="note">Made with ❤️ by Prince | Class 9th</div>
+</div>
+</main>
+</div>
+
+<script>
+const API_URL="PASTE_YOUR_WORKER_URL_HERE";
+const $=id=>document.getElementById(id);
+let messages=[],chats=[],busy=false;
+
+function addMessage(role,text){
+$("welcome")?.remove();
+const row=document.createElement("div");
+row.className="message "+role;
+const av=document.createElement("div");
+av.className="avatar";
+av.textContent=role==="user"?"P":"✦";
+const bubble=document.createElement("div");
+bubble.className="bubble";
+bubble.textContent=text;
+row.append(av,bubble);
+$("chat").append(row);
+$("chat").scrollTop=$("chat").scrollHeight;
+return bubble;
+}
+
+function renderHistory(){
+$("history").replaceChildren();
+chats.forEach((c,i)=>{
+const b=document.createElement("button");
+b.textContent="💬 "+c.title;
+b.onclick=()=>{
+messages=[...c.messages];
+newScreen();
+messages.forEach(m=>addMessage(m.role,m.content));
+};
+$("history").append(b);
+});
+}
+
+function save(){
+if(!messages.length)return;
+const first=messages.find(m=>m.role==="user");
+chats.unshift({title:first.content.slice(0,30),messages:[...messages]});
+chats=chats.slice(0,20);
+try{localStorage.setItem("princeHistory",JSON.stringify(chats))}catch(e){}
+renderHistory();
+}
+
+function newScreen(){
+$("chat").innerHTML=`
+<div class="welcome" id="welcome">
+<div style="font-size:50px">🤖</div>
+<h1>Hello, <span class="purple">Prince!</span></h1>
+<p>Your personal AI assistant.</p>
+<div class="suggestions">
+<button data-q="Explain Science for Class 9">🧪 Explain Science</button>
+<button data-q="Give me 10 GK questions">🌎 General Knowledge</button>
+<button data-q="Teach me algebra">📐 Learn Maths</button>
+<button data-q="Tell me about space">🚀 Explore Space</button>
+</div></div>`;
+}
+
+$("new").onclick=()=>{
+messages=[];
+newScreen();
+$("status").textContent="New Chat";
+};
+
+try{
+chats=JSON.parse(localStorage.getItem("princeHistory")||"[]");
+if(!Array.isArray(chats))chats=[];
+}catch(e){chats=[]}
+renderHistory();
+
+$("chat").addEventListener("click",e=>{
+const b=e.target.closest("[data-q]");
+if(b){$("input").value=b.dataset.q;$("input").focus()}
+});
+
+$("theme").onclick=()=>{
+const dark=document.body.dataset.light==="yes";
+document.body.dataset.light=dark?"no":"yes";
+const vars=dark
+?["#10111b","#191a29","#222337","#fff","#aaaabd","#36364b"]
+:["#f5f5fa","#e8e8f2","#fff","#202030","#666","#ddd"];
+["--bg","--side","--panel","--text","--muted","--border"]
+.forEach((v,i)=>document.documentElement.style.setProperty(v,vars[i]));
+};
+
+$("input").addEventListener("keydown",e=>{
+if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("form").requestSubmit()}
+});
+
+$("form").addEventListener("submit",async e=>{
+e.preventDefault();
+const text=$("input").value.trim();
+if(!text||busy)return;
+
+if(!API_URL.startsWith("https://")){
+alert("First add your Cloudflare Worker URL.");
+return;
+}
+
+busy=true;
+$("send").disabled=true;
+$("input").value="";
+messages.push({role:"user",content:text});
+addMessage("user",text);
+const reply=addMessage("assistant","Thinking...");
+$("status").textContent="Thinking...";
+
+try{
+const response=await fetch(API_URL,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+model:$("model").value,
+messages:messages
+})
+});
+const data=await response.json();
+if(!response.ok)throw new Error(data.error||"API error");
+if(typeof data.reply!=="string")throw new Error("Invalid response");
+
+reply.textContent=data.reply;
+messages.push({role:"assistant",content:data.reply});
+save();
+$("status").textContent="Ready";
+}catch(err){
+reply.textContent="Error: "+err.message;
+$("status").textContent="Connection error";
+}finally{
+busy=false;
+$("send").disabled=false;
+}
+});
+</script>
+</body>
+</html>
+
+export default {
+ async fetch(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  const allowedOrigin = env.ALLOWED_ORIGIN;
+
+  const headers = {
+   "Content-Type":"application/json",
+   "Access-Control-Allow-Origin":origin===allowedOrigin?origin:"null",
+   "Access-Control-Allow-Methods":"POST, OPTIONS",
+   "Access-Control-Allow-Headers":"Content-Type",
+   "Vary":"Origin"
+  };
+
+  if(origin!==allowedOrigin)
+   return Response.json({error:"Origin not allowed"},{status:403});
+
+  if(request.method==="OPTIONS")
+   return new Response(null,{status:204,headers});
+
+  if(request.method!=="POST")
+   return Response.json({error:"POST only"},{status:405,headers});
+
+  try{
+   const body=await request.json();
+   if(!Array.isArray(body.messages)||!body.messages.length)
+    return Response.json({error:"Messages required"},{status:400,headers});
+
+   const models=["llama-3.3-70b-versatile","openai/gpt-oss-20b"];
+   const model=models.includes(body.model)?body.model:models[0];
+
+   const messages=body.messages.slice(-20);
+   if(messages.some(m=>
+    !m||!["user","assistant"].includes(m.role)||
+    typeof m.content!=="string"||m.content.length>10000
+   )){
+    return Response.json({error:"Invalid message"},{status:400,headers});
+   }
+
+   const result=await fetch(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+     method:"POST",
+     headers:{
+      "Authorization":"Bearer "+env.GROQ_API_KEY,
+      "Content-Type":"application/json"
+     },
+     body:JSON.stringify({
+      model,
+      messages:[
+       {role:"system",content:"You are Prince AI, a friendly assistant for Prince, a Class 9 student. Explain clearly and answer in the user's language."},
+       ...messages
+      ],
+      temperature:0.7,
+      max_tokens:1200
+     })
+    }
+   );
+
+   const data=await result.json();
+   if(!result.ok)
+    return Response.json({error:data.error?.message||"Groq API error"},{status:result.status,headers});
+
+   return Response.json({
+    reply:data.choices?.[0]?.message?.content||"No reply"
+   },{headers});
+
+  }catch(error){
+   return Response.json({error:"Server error"},{status:500,headers});
+  }
+ }
+};
